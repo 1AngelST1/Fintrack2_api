@@ -1,60 +1,30 @@
-from django.db.models import *
-from django.db import transaction
-from Fintrack2_api.models import Profiles
-from Fintrack2_api.serializers import UserSerializer
-from Fintrack2_api.serializers import *
-from Fintrack2_api.models import *
-from rest_framework import permissions
-from rest_framework import generics
-from rest_framework import status
+from rest_framework import generics, views, status, permissions
 from rest_framework.response import Response
-from django.contrib.auth.models import Group
+from django.contrib.auth import get_user_model
+from Fintrack2_api.serializers import UserRegistrationSerializer
 
-class Userme(generics.CreateAPIView):
-    permission_classes = (permissions.IsAuthenticated,)
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        #TODO: Regresar perfil del usuario
-        return Response({})
+User = get_user_model()
 
-class UsersView(generics.CreateAPIView):
+# Registro de Usuario
+class RegisterView(generics.CreateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
 
-    @transaction.atomic
-    def post(self, request, *args, **kwargs):
+# Verificar si el email existe (para el frontend)
+class CheckEmailView(views.APIView):
+    def get(self, request):
+        email = request.query_params.get('correo', None)
+        if email and User.objects.filter(email=email).exists():
+            return Response({'exists': True}, status=status.HTTP_200_OK)
+        return Response({'exists': False}, status=status.HTTP_200_OK)
+    
+# --- AGREGAR ESTA NUEVA CLASE ---
+class UserUpdateView(generics.RetrieveUpdateAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    # Solo permitimos que un usuario logueado se edite a sí mismo
+    permission_classes = [permissions.IsAuthenticated]
 
-        user = UserSerializer(data=request.data)
-        if user.is_valid():
-            #Grab user data
-            role = 'user'
-            first_name = request.data['first_name']
-            last_name = request.data['last_name']
-            email = request.data['email']
-            password = request.data['password']
-
-            existing_user = User.objects.filter(email=email).first()
-
-            if existing_user:
-                return Response({"message":"Username "+email+", is already taken"},400)
-
-            user = User.objects.create( username = email,
-                                        email = email,
-                                        first_name = first_name,
-                                        last_name = last_name,
-                                        is_active = 1)
-
-
-            user.save()
-            user.set_password(password)
-            user.save()
-
-            group, created = Group.objects.get_or_create(name=role)
-            group.user_set.add(user)
-            user.save()
-
-            #Create a profile for the user
-            profile = Profiles.objects.create(user=user)
-            profile.save()
-
-            return Response({"profile_created_id": profile.id }, 201)
-
-        return Response(user.errors, status=status.HTTP_400_BAD_REQUEST)
+    def get_queryset(self):
+        # Aseguramos que un usuario solo pueda editar su propio perfil
+        return User.objects.filter(id=self.request.user.id)

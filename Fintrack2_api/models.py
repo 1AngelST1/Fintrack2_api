@@ -1,24 +1,15 @@
 from django.db import models
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-from rest_framework.authentication import TokenAuthentication
-from django.contrib.auth.models import AbstractUser, User
-from django.conf import settings
+from django.contrib.auth.models import AbstractUser
 
-from django.db import models
-from django.contrib.auth.models import User
+# Si ya tienes otros modelos aquí, pon este al principio
+class CustomUser(AbstractUser):
+    # Usamos email como identificador principal
+    email = models.EmailField(unique=True)
+    rol = models.CharField(max_length=20, default='usuario')
+    
+    # Configuraciones de Django para usar email en lugar de username
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username', 'first_name', 'last_name']
 
-from rest_framework.authentication import TokenAuthentication
-
-class BearerTokenAuthentication(TokenAuthentication):
-    keyword = "Bearer"
-
-
-class Profiles(models.Model):
-    id = models.BigAutoField(primary_key=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="profiles")
-    creation = models.DateTimeField(auto_now_add=True, null=True, blank=True)
-    update = models.DateTimeField(null=True, blank=True)
     def __str__(self):
-        return f"Perfil de {self.user.first_name} {self.user.last_name}"
-
+        return self.email
