@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from django.db.models import Sum
 from Fintrack2_api.models import Category, Transaction, Budget
 from Fintrack2_api.serializers import CategorySerializer, TransactionSerializer, BudgetSerializer
+from datetime import datetime, date # Importar datetime y date
 
-# --- VISTA DE CATEGORÍAS ---
+# --- VISTA DE CATEGORÍAS (Mantenida) ---
 class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -15,9 +16,9 @@ class CategoryViewSet(viewsets.ModelViewSet):
         queryset = Category.objects.all()
 
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
-            usuario_id = self.request.query_params.get('usuarioId')
-            if usuario_id:
-                queryset = queryset.filter(user_id=usuario_id)
+            target_user_id = self.request.query_params.get('usuario') 
+            if target_user_id:
+                queryset = queryset.filter(user_id=target_user_id)
         else:
             queryset = queryset.filter(user=user)
             
@@ -33,7 +34,6 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        # Lógica para permitir al admin crear categorías para otros
         if (user.is_staff or getattr(user, 'rol', '') == 'admin') and 'usuario' in self.request.data:
             from django.contrib.auth import get_user_model
             User = get_user_model()
@@ -45,32 +45,36 @@ class CategoryViewSet(viewsets.ModelViewSet):
         else:
             serializer.save(user=user)
 
-# --- VISTA DE TRANSACCIONES ---
+# --- VISTA DE TRANSACCIONES (get_queryset mantenido, stats corregido) ---
 class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
+        queryset = Transaction.objects.all()
         
-        if user.is_staff or getattr(user, 'rol', '') == 'admin':
-            queryset = Transaction.objects.all()
-            target_user_id = self.request.query_params.get('usuarioId')
-            if target_user_id:
-                queryset = queryset.filter(user_id=target_user_id)
-        else:
-            queryset = Transaction.objects.filter(user=user)
+        # 1. Manejo de permisos y usuario base
+        if not (user.is_staff or getattr(user, 'rol', '') == 'admin'):
+            queryset = queryset.filter(user=user)
         
-        fecha_desde = self.request.query_params.get('fechaDesde')
-        fecha_hasta = self.request.query_params.get('fechaHasta')
+        # 2. Obtener y Aplicar Filtros (Mapeados desde Angular)
+        target_user_id = self.request.query_params.get('usuario')
+        fecha_after = self.request.query_params.get('fecha_after')
+        fecha_before = self.request.query_params.get('fecha_before')
         tipo = self.request.query_params.get('tipo')
         categoria = self.request.query_params.get('categoria')
         limit = self.request.query_params.get('limit')
 
-        if fecha_desde:
-            queryset = queryset.filter(fecha__gte=fecha_desde)
-        if fecha_hasta:
-            queryset = queryset.filter(fecha__lte=fecha_hasta)
+        if target_user_id:
+            queryset = queryset.filter(user_id=target_user_id)
+
+        # Usar la misma lógica de filtrado directo que el frontend espera
+        if fecha_after:
+            queryset = queryset.filter(fecha__gte=fecha_after)
+        if fecha_before:
+            queryset = queryset.filter(fecha__lte=fecha_before)
+            
         if tipo:
             queryset = queryset.filter(tipo=tipo)
         if categoria:
@@ -88,13 +92,41 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        # Si TransactionSerializer ya maneja usuarioId (como read_only), aquí forzamos el usuario
-        # O permitimos admin override si modificas el serializer en el futuro
         serializer.save(user=user)
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        queryset = self.filter_queryset(self.get_queryset())
+        # --- APLICACIÓN ROBUSTA DE FILTRO DE FECHAS EN REPORTES ---
+        user = self.request.user
+        
+        if user.is_staff or getattr(user, 'rol', '') == 'admin':
+            # Si es Admin, la base es TODAS las transacciones
+            queryset = Transaction.objects.all() 
+        else:
+            # Si NO es admin, solo ve sus propias estadísticas
+            queryset = Transaction.objects.filter(user=user)
+        
+        # Obtener los parámetros de fecha (mapeados desde Angular)
+        fecha_after_str = self.request.query_params.get('fecha_after')
+        fecha_before_str = self.request.query_params.get('fecha_before')
+        
+        # Aplicar SÓLO los filtros de fecha con parsing robusto
+        if fecha_after_str:
+            try:
+                # Convertimos la cadena (ej: "2025-12-01") a objeto date
+                start_date = datetime.strptime(fecha_after_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(fecha__gte=start_date)
+            except ValueError:
+                pass 
+                
+        if fecha_before_str:
+            try:
+                end_date = datetime.strptime(fecha_before_str, '%Y-%m-%d').date()
+                queryset = queryset.filter(fecha__lte=end_date)
+            except ValueError:
+                pass
+
+        # Realizar la agregación
         ingresos = queryset.filter(tipo='Ingreso').aggregate(total=Sum('monto'))['total'] or 0
         gastos = queryset.filter(tipo='Gasto').aggregate(total=Sum('monto'))['total'] or 0
         
@@ -104,7 +136,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             'balance': ingresos - gastos
         })
 
-# --- VISTA DE PRESUPUESTOS (CORREGIDA) ---
+# --- VISTA DE PRESUPUESTOS (Mantenida) ---
 class BudgetViewSet(viewsets.ModelViewSet):
     serializer_class = BudgetSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -113,7 +145,8 @@ class BudgetViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
             queryset = Budget.objects.all()
-            target_user = self.request.query_params.get('usuarioId')
+            
+            target_user = self.request.query_params.get('usuario')
             categoria_id = self.request.query_params.get('categoriaId')
             
             if target_user:
@@ -126,9 +159,7 @@ class BudgetViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        # Si es admin, respetamos el usuarioId que viene en el serializer
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
             serializer.save()
         else:
-            # Si es usuario normal, forzamos que sea suyo (por seguridad)
             serializer.save(user=user)

@@ -28,3 +28,9 @@ class UserUpdateView(generics.RetrieveUpdateAPIView):
     def get_queryset(self):
         # Aseguramos que un usuario solo pueda editar su propio perfil
         return User.objects.filter(id=self.request.user.id)
+    
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserRegistrationSerializer
+    # Protegemos la ruta: solo usuarios logueados (idealmente admins) pueden ver la lista
+    permission_classes = [permissions.IsAuthenticated]
