@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
-from django.conf import settings  # Importante para referenciar al usuario
+from django.conf import settings
 
 # 1. MODELO DE USUARIO
 class CustomUser(AbstractUser):
@@ -17,10 +17,8 @@ class CustomUser(AbstractUser):
 class Category(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='categories')
     nombre = models.CharField(max_length=100)
-    tipo = models.CharField(max_length=20) # 'Ingreso' o 'Gasto'
+    tipo = models.CharField(max_length=20)
     estado = models.BooleanField(default=True)
-    
-    # Campo nuevo para el color (Hexadecimal)
     color = models.CharField(max_length=20, default='#34495e') 
 
     class Meta:
@@ -46,10 +44,14 @@ class Transaction(models.Model):
 class Budget(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='budgets')
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
+    
+    # --- NUEVO CAMPO: NOMBRE DEL PRESUPUESTO ---
+    nombre = models.CharField(max_length=100, blank=True, null=True, help_text="Nombre opcional para el presupuesto")
+    
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     periodo = models.CharField(max_length=20, default='mensual')
     fecha_inicio = models.DateField(null=True, blank=True)
     fecha_fin = models.DateField(null=True, blank=True)
 
     def __str__(self):
-        return f"Presupuesto {self.category.nombre}: {self.monto}"
+        return f"{self.nombre or 'Presupuesto'} - {self.category.nombre}: {self.monto}"

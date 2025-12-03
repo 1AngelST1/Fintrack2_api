@@ -14,19 +14,13 @@ class CategoryViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Category.objects.all()
 
-        # Si es Admin, permitir filtrar por usuarioId específico
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
             usuario_id = self.request.query_params.get('usuarioId')
             if usuario_id:
                 queryset = queryset.filter(user_id=usuario_id)
-            else:
-                # Si es admin pero no filtra, ve todas (o puedes restringir a las suyas)
-                pass 
         else:
-            # Usuario normal solo ve las suyas
             queryset = queryset.filter(user=user)
             
-        # Filtros adicionales
         tipo = self.request.query_params.get('tipo')
         nombre = self.request.query_params.get('nombre')
         
@@ -38,9 +32,18 @@ class CategoryViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        # Si es admin y envía un usuarioId en el body (manejado en serializer) o URL
-        # Por defecto, asignamos al usuario actual si no se especifica otro lógica
-        serializer.save(user=self.request.user)
+        user = self.request.user
+        # Lógica para permitir al admin crear categorías para otros
+        if (user.is_staff or getattr(user, 'rol', '') == 'admin') and 'usuario' in self.request.data:
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            try:
+                target_user = User.objects.get(pk=self.request.data['usuario'])
+                serializer.save(user=target_user)
+            except User.DoesNotExist:
+                serializer.save(user=user)
+        else:
+            serializer.save(user=user)
 
 # --- VISTA DE TRANSACCIONES ---
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -50,25 +53,20 @@ class TransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # 1. Lógica base: ¿Quién pide los datos?
         if user.is_staff or getattr(user, 'rol', '') == 'admin':
             queryset = Transaction.objects.all()
-            # Admin puede filtrar por usuarioId
             target_user_id = self.request.query_params.get('usuarioId')
             if target_user_id:
                 queryset = queryset.filter(user_id=target_user_id)
         else:
-            # Usuario normal: SOLO sus datos
             queryset = Transaction.objects.filter(user=user)
         
-        # 2. Obtener parámetros de la URL
         fecha_desde = self.request.query_params.get('fechaDesde')
         fecha_hasta = self.request.query_params.get('fechaHasta')
-        tipo = self.request.query_params.get('tipo')          # Faltaba esto
-        categoria = self.request.query_params.get('categoria') # Faltaba esto
+        tipo = self.request.query_params.get('tipo')
+        categoria = self.request.query_params.get('categoria')
         limit = self.request.query_params.get('limit')
 
-        # 3. Aplicar Filtros
         if fecha_desde:
             queryset = queryset.filter(fecha__gte=fecha_desde)
         if fecha_hasta:
@@ -78,10 +76,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
         if categoria:
             queryset = queryset.filter(categoria=categoria)
 
-        # 4. Ordenamiento
         queryset = queryset.order_by('-fecha')
 
-        # 5. Limitar resultados (para dashboard)
         if limit:
             try:
                 return queryset[:int(limit)]
@@ -92,32 +88,15 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        
-        # Si es Admin y el frontend manda un usuarioId, el serializer debería manejarlo
-        # Si tu TransactionSerializer tiene 'usuarioId' como read_only, 
-        # aquí deberíamos inyectar el ID si viene en el request.data
-        
-        if (user.is_staff or getattr(user, 'rol', '') == 'admin') and 'usuarioId' in self.request.data:
-             # Ojo: esto requiere importar el modelo User o usar get_user_model()
-             from django.contrib.auth import get_user_model
-             User = get_user_model()
-             target_user = User.objects.get(pk=self.request.data['usuarioId'])
-             serializer.save(user=target_user)
-        else:
-            serializer.save(user=user)
+        # Si TransactionSerializer ya maneja usuarioId (como read_only), aquí forzamos el usuario
+        # O permitimos admin override si modificas el serializer en el futuro
+        serializer.save(user=user)
 
-    # --- ACCIÓN EXTRA: Calcular Balance ---
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        # Reutilizamos la lógica de filtrado para que las stats coincidan con los filtros
         queryset = self.filter_queryset(self.get_queryset())
-
-        # Calculamos las sumas directo en la BD
         ingresos = queryset.filter(tipo='Ingreso').aggregate(total=Sum('monto'))['total'] or 0
         gastos = queryset.filter(tipo='Gasto').aggregate(total=Sum('monto'))['total'] or 0
-        
-        # Nota: Asegúrate que en tu BD el tipo se guarde como 'Ingreso'/'Gasto' (Title Case) 
-        # o 'ingreso'/'gasto' (lowercase) y ajusta las líneas de arriba.
         
         return Response({
             'ingresos': ingresos,
@@ -125,7 +104,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             'balance': ingresos - gastos
         })
 
-# --- VISTA DE PRESUPUESTOS ---
+# --- VISTA DE PRESUPUESTOS (CORREGIDA) ---
 class BudgetViewSet(viewsets.ModelViewSet):
     serializer_class = BudgetSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -146,4 +125,10 @@ class BudgetViewSet(viewsets.ModelViewSet):
         return Budget.objects.filter(user=user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        user = self.request.user
+        # Si es admin, respetamos el usuarioId que viene en el serializer
+        if user.is_staff or getattr(user, 'rol', '') == 'admin':
+            serializer.save()
+        else:
+            # Si es usuario normal, forzamos que sea suyo (por seguridad)
+            serializer.save(user=user)
