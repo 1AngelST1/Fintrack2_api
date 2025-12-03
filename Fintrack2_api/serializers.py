@@ -43,13 +43,19 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ['id', 'nombre', 'tipo', 'estado', 'color', 'usuarioId']
 
+# --- SERIALIZER DE TRANSACCIÓN (ACTUALIZADO) ---
 class TransactionSerializer(serializers.ModelSerializer):
-    usuarioId = serializers.PrimaryKeyRelatedField(source='user', read_only=True)
+    # Habilitamos escritura para 'usuarioId'
+    usuarioId = serializers.PrimaryKeyRelatedField(
+        source='user', 
+        queryset=User.objects.all()
+    )
+    
     class Meta:
         model = Transaction
         fields = ['id', 'monto', 'tipo', 'categoria', 'descripcion', 'fecha', 'usuarioId']
 
-# --- SERIALIZER DE PRESUPUESTO (FINAL) ---
+# --- SERIALIZER DE PRESUPUESTO ---
 class BudgetSerializer(serializers.ModelSerializer):
     usuarioId = serializers.PrimaryKeyRelatedField(
         source='user', 
@@ -60,12 +66,9 @@ class BudgetSerializer(serializers.ModelSerializer):
         queryset=Category.objects.all()
     )
     
-    # [CAMBIO CLAVE] Renombramos 'categoria_nombre' a 'categoria'
-    # Esto hace que el JSON salga como: { "categoria": "Comida", ... }
-    # Coincidiendo con tu interfaz de Angular.
+    # Renombramos 'categoria_nombre' a 'categoria' para coincidir con el front
     categoria = serializers.CharField(source='category.nombre', read_only=True)
 
     class Meta:
         model = Budget
-        # Usamos 'categoria' en lugar de 'categoria_nombre'
         fields = ['id', 'usuarioId', 'categoriaId', 'categoria', 'monto', 'periodo']
