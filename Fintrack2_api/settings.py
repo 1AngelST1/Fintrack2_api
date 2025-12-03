@@ -24,7 +24,7 @@ INSTALLED_APPS = [
     'rest_framework',                 # API Rest
     'rest_framework.authtoken',       # Soporte de tokens
     'corsheaders',                    # Manejo de CORS (conexión con Angular)
-    # Tu aplicación principal (donde están tus models.py, views, etc.)
+    # Tu aplicación principal
     'Fintrack2_api',
 ]
 
@@ -51,7 +51,7 @@ ROOT_URLCONF = 'Fintrack2_api.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [], # Puedes agregar os.path.join(BASE_DIR, 'templates') si usas HTML
+        'DIRS': [], 
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -78,7 +78,7 @@ DATABASES = {
     }
 }
 
-# [cite_start]CONFIGURACIÓN DE USUARIO PERSONALIZADO [cite: 53]
+# CONFIGURACIÓN DE USUARIO PERSONALIZADO
 # Esto le dice a Django que use tu modelo CustomUser en lugar del default
 AUTH_USER_MODEL = 'Fintrack2_api.CustomUser'
 
@@ -107,8 +107,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 # Configuración de Django Rest Framework
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 10,
+    # Paginación DESACTIVADA para compatibilidad con Angular (devuelve arrays directos)
+    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    # 'PAGE_SIZE': 10,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
@@ -118,6 +119,14 @@ REST_FRAMEWORK = {
     ),
 }
 
-# --- CORRECCIÓN AQUÍ ---
-# Esta línea va AFUERA del diccionario, al final del archivo
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- AGREGADOS CRÍTICOS ---
+
+# Clave requerida por tu archivo cypher_utils.py
+# (Necesaria para que no falle el servidor al intentar encriptar)
+CRYPTO_PASSWORD = "clave-secreta-para-encriptacion-fintrack-cambiar-en-prod"
+
+# Manejo de 'Trailing Slash'
+# Evita errores 404 si Angular pide '/api/transactions' sin la barra final '/'
+APPEND_SLASH = True
