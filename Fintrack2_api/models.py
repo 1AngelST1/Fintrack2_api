@@ -40,18 +40,16 @@ class Transaction(models.Model):
     def __str__(self):
         return f"{self.tipo}: {self.monto} - {self.categoria}"
 
-# 4. MODELO DE PRESUPUESTO
+# 4. MODELO DE PRESUPUESTO (CORREGIDO)
 class Budget(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='budgets')
     category = models.ForeignKey(Category, on_delete=models.CASCADE)
-    
-    # --- NUEVO CAMPO: NOMBRE DEL PRESUPUESTO ---
-    nombre = models.CharField(max_length=100, blank=True, null=True, help_text="Nombre opcional para el presupuesto")
-    
     monto = models.DecimalField(max_digits=12, decimal_places=2)
     periodo = models.CharField(max_length=20, default='mensual')
-    fecha_inicio = models.DateField(null=True, blank=True)
-    fecha_fin = models.DateField(null=True, blank=True)
+
+
+    class Meta:
+        unique_together = ('user', 'category') 
 
     def __str__(self):
         return f"{self.nombre or 'Presupuesto'} - {self.category.nombre}: {self.monto}"

@@ -1,10 +1,10 @@
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from Fintrack2_api.models import Category, Transaction, Budget
+from rest_framework.validators import UniqueTogetherValidator
 
 User = get_user_model()
 
-# ... (UserRegistrationSerializer y CategorySerializer se mantienen igual) ...
 class UserRegistrationSerializer(serializers.ModelSerializer):
     nombre = serializers.CharField(source='first_name')
     apellidos = serializers.CharField(source='last_name')
@@ -43,9 +43,9 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ['id', 'nombre', 'tipo', 'estado', 'color', 'usuarioId']
 
-# --- SERIALIZER DE TRANSACCIÓN (ACTUALIZADO) ---
+
 class TransactionSerializer(serializers.ModelSerializer):
-    # Habilitamos escritura para 'usuarioId'
+ 
     usuarioId = serializers.PrimaryKeyRelatedField(
         source='user', 
         queryset=User.objects.all()
@@ -55,8 +55,8 @@ class TransactionSerializer(serializers.ModelSerializer):
         model = Transaction
         fields = ['id', 'monto', 'tipo', 'categoria', 'descripcion', 'fecha', 'usuarioId']
 
-# --- SERIALIZER DE PRESUPUESTO ---
 class BudgetSerializer(serializers.ModelSerializer):
+    # Campos definidos explícitamente
     usuarioId = serializers.PrimaryKeyRelatedField(
         source='user', 
         queryset=User.objects.all()
@@ -66,9 +66,17 @@ class BudgetSerializer(serializers.ModelSerializer):
         queryset=Category.objects.all()
     )
     
-    # Renombramos 'categoria_nombre' a 'categoria' para coincidir con el front
     categoria = serializers.CharField(source='category.nombre', read_only=True)
 
     class Meta:
         model = Budget
         fields = ['id', 'usuarioId', 'categoriaId', 'categoria', 'monto', 'periodo']
+        
+        # CORRECCIÓN: Los nombres aquí deben coincidir con los campos del SERIALIZADOR
+        validators = [
+            UniqueTogetherValidator(
+                queryset=Budget.objects.all(),
+                fields=['usuarioId', 'categoriaId'], # <--- CAMBIO: Usar nombres del serializador
+                message="Ya existe un presupuesto configurado para esta categoría."
+            )
+        ]
