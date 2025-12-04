@@ -1,15 +1,28 @@
 import os
+from pathlib import Path
+import sys
 
-# Construye rutas dentro del proyecto así: os.path.join(BASE_DIR, ...)
+# Construye rutas dentro del proyecto
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# ADVERTENCIA DE SEGURIDAD: mantén la clave secreta usada en producción en secreto
-SECRET_KEY = '-_&+lsebec(whhw!%n@ww&1j=4-^j_if9x8$q778+99oz&!ms2'
+# --- INTENTAR CARGAR VARIABLES DE ENTORNO ---
+# Esto ayuda a que lea el archivo .env tanto en local como en producción si usas python-dotenv
+try:
+    from dotenv import load_dotenv
+    env_path = os.path.join(BASE_DIR, '.env')
+    load_dotenv(env_path)
+except ImportError:
+    pass
 
-# ADVERTENCIA DE SEGURIDAD: no ejecutes con debug activado en producción
-DEBUG = True
+# ADVERTENCIA DE SEGURIDAD: usa variables de entorno
+# Si no encuentra la variable, usa una clave insegura por defecto (solo para dev)
+SECRET_KEY = os.getenv('SECRET_KEY', '-_&+lsebec(whhw!%n@ww&1j=4-^j_if9x8$q778+99oz&!ms2')
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+# DEBUG: Lee del .env. Si dice "True" es verdadero, si no, falso.
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
+
+# ALLOWED_HOSTS: Importante agregar tu dominio de PythonAnywhere
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "AngelST.pythonanywhere.com"]
 
 # Definición de aplicaciones
 INSTALLED_APPS = [
@@ -23,7 +36,8 @@ INSTALLED_APPS = [
     'django_filters',                 # Necesarios para los filtros de DRF
     'rest_framework',                 # API Rest
     'rest_framework.authtoken',       # Soporte de tokens
-    'corsheaders',                    # Manejo de CORS (conexión con Angular)
+    'corsheaders',                    # Manejo de CORS
+    'django_rest_auth',               # (Parece que lo tenías en requirements.txt)
     # Tu aplicación principal
     'Fintrack2_api',
 ]
@@ -31,7 +45,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'corsheaders.middleware.CorsMiddleware',     # IMPORTANTE: CORS debe ir antes de CommonMiddleware
+    'corsheaders.middleware.CorsMiddleware',     # IMPORTANTE: CORS antes de Common
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -39,15 +53,13 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# Configuración de CORS: permite que Angular (puerto 4200) haga peticiones
-CORS_ALLOWED_ORIGINS = [
-    'http://localhost:4200',
-]
+# Configuración de CORS
+# Lee la variable del .env y la convierte en lista
+CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:4200').split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 ROOT_URLCONF = 'Fintrack2_api.urls'
 
-# Configuración de Plantillas (Templates)
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -66,20 +78,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'Fintrack2_api.wsgi.application'
 
-# Base de Datos
-# Asegúrate de que el archivo my.cnf existe en la raíz y tiene tus credenciales
+# --- BASE DE DATOS CORREGIDA ---
+# Ahora usa las variables que definiste en tu .env en PythonAnywhere
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
+        'NAME': os.getenv('DB_NAME'),
+        'USER': os.getenv('DB_USER'),
+        'PASSWORD': os.getenv('DB_PASSWORD'),
+        'HOST': os.getenv('DB_HOST'),
+        'PORT': os.getenv('DB_PORT', '3306'),
         'OPTIONS': {
-            'read_default_file': os.path.join(BASE_DIR, "my.cnf"),
             'charset': 'utf8mb4',
         }
     }
 }
 
 # CONFIGURACIÓN DE USUARIO PERSONALIZADO
-# Esto le dice a Django que use tu modelo CustomUser en lugar del default
 AUTH_USER_MODEL = 'Fintrack2_api.CustomUser'
 
 # Validadores de contraseñas
@@ -97,8 +112,10 @@ USE_I18N = True
 USE_L10N = True
 USE_TZ = True
 
-# Archivos Estáticos
+# --- ARCHIVOS ESTÁTICOS (CORREGIDO) ---
 STATIC_URL = '/static/'
+# Esta línea faltaba y causaba el error de ImproperlyConfigured
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 # Archivos Media
 MEDIA_URL = "/media/"
@@ -107,9 +124,6 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 # Configuración de Django Rest Framework
 REST_FRAMEWORK = {
     'COERCE_DECIMAL_TO_STRING': False,
-    # Paginación DESACTIVADA para compatibilidad con Angular (devuelve arrays directos)
-    # 'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    # 'PAGE_SIZE': 10,
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.TokenAuthentication',
@@ -121,12 +135,8 @@ REST_FRAMEWORK = {
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# --- AGREGADOS CRÍTICOS ---
-
 # Clave requerida por tu archivo cypher_utils.py
-# (Necesaria para que no falle el servidor al intentar encriptar)
 CRYPTO_PASSWORD = "clave-secreta-para-encriptacion-fintrack-cambiar-en-prod"
 
 # Manejo de 'Trailing Slash'
-# Evita errores 404 si Angular pide '/api/transactions' sin la barra final '/'
 APPEND_SLASH = True
